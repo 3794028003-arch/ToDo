@@ -1,5 +1,6 @@
 package com.example.localfirst.database
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.localfirst.sync.TaskStatus
@@ -12,4 +13,6 @@ data class TaskEntity(
     val localRevision: Long,
     val serverVersion: Long?,
     val deletedAtMillis: Long?,
+    @ColumnInfo(defaultValue = "0")
+    val serverDeletionNoticePending: Boolean = false,
 )

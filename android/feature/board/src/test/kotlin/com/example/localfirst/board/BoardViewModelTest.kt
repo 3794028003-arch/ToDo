@@ -2,6 +2,7 @@ package com.example.localfirst.board
 
 import com.example.localfirst.data.Task
 import com.example.localfirst.data.TaskRepository
+import com.example.localfirst.data.ServerDeletionNotice
 import com.example.localfirst.sync.TaskStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -67,6 +68,24 @@ class BoardViewModelTest {
             repository.calls,
         )
     }
+
+    @Test
+    fun serverDeletionNoticeIsExposedUntilTheUiDismissesIt() = runTest {
+        val repository = FakeTaskRepository(emptyList())
+        val viewModel = BoardViewModel(repository)
+        val notice = ServerDeletionNotice("deleted-task", "Offline task")
+
+        repository.publishServerDeletionNotice(notice)
+        advanceUntilIdle()
+
+        assertEquals(notice, viewModel.state.value.serverDeletionNotice)
+
+        viewModel.onAction(BoardAction.DismissServerDeletionNotice(notice.taskId))
+        advanceUntilIdle()
+
+        assertEquals(null, viewModel.state.value.serverDeletionNotice)
+        assertEquals("dismiss-notice", repository.calls.last())
+    }
 }
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -86,7 +105,11 @@ private class FakeTaskRepository(
     initialTasks: List<Task>,
 ) : TaskRepository {
     private val mutableTasks = MutableStateFlow(initialTasks)
+    private val mutableServerDeletionNotices =
+        MutableStateFlow<List<ServerDeletionNotice>>(emptyList())
     override val tasks: Flow<List<Task>> = mutableTasks
+    override val serverDeletionNotices: Flow<List<ServerDeletionNotice>> =
+        mutableServerDeletionNotices
     val calls = mutableListOf<String>()
 
     override suspend fun createTask(title: String): String {
@@ -112,5 +135,16 @@ private class FakeTaskRepository(
     override suspend fun deleteTask(taskId: String) {
         calls += "delete"
         mutableTasks.value = mutableTasks.value.filterNot { task -> task.id == taskId }
+    }
+
+    override suspend fun dismissServerDeletionNotice(taskId: String) {
+        calls += "dismiss-notice"
+        mutableServerDeletionNotices.value = mutableServerDeletionNotices.value.filterNot {
+            notice -> notice.taskId == taskId
+        }
+    }
+
+    fun publishServerDeletionNotice(notice: ServerDeletionNotice) {
+        mutableServerDeletionNotices.value += notice
     }
 }

@@ -6,6 +6,7 @@ import com.example.localfirst.sync.PushResult
 import com.example.localfirst.sync.RetryPolicy
 import com.example.localfirst.sync.TaskStatus
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -154,6 +155,14 @@ class RoomBackedDisasterSyncTest {
         assertEquals(8L, store.task("task-x")?.serverVersion)
         assertEquals(1, api.attemptsFor("x-status"))
         assertEquals(0, api.attemptsFor("x-later-update"))
+
+        val repository = RoomTaskRepository(database, scheduleSync = {})
+        val notice = repository.serverDeletionNotices.first().single()
+        assertEquals("task-x", notice.taskId)
+        assertEquals("Task task-x", notice.title)
+
+        repository.dismissServerDeletionNotice(notice.taskId)
+        assertTrue(repository.serverDeletionNotices.first().isEmpty())
         database.close()
     }
 }

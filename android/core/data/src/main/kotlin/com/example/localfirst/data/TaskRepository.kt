@@ -9,8 +9,14 @@ data class Task(
     val status: TaskStatus,
 )
 
+data class ServerDeletionNotice(
+    val taskId: String,
+    val title: String,
+)
+
 interface TaskRepository {
     val tasks: Flow<List<Task>>
+    val serverDeletionNotices: Flow<List<ServerDeletionNotice>>
 
     suspend fun createTask(title: String): String
 
@@ -19,4 +25,6 @@ interface TaskRepository {
     suspend fun changeStatus(taskId: String, status: TaskStatus)
 
     suspend fun deleteTask(taskId: String)
+
+    suspend fun dismissServerDeletionNotice(taskId: String)
 }

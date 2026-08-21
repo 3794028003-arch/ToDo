@@ -24,10 +24,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,9 +51,20 @@ fun BoardRoute(
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.state.collectAsState()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val serverDeletionNotice = state.serverDeletionNotice
+    LaunchedEffect(serverDeletionNotice?.taskId) {
+        serverDeletionNotice?.let { notice ->
+            snackbarHostState.showSnackbar(
+                message = "任务“${notice.title}”已在其他设备删除",
+            )
+            viewModel.onAction(BoardAction.DismissServerDeletionNotice(notice.taskId))
+        }
+    }
     BoardScreen(
         state = state,
         onAction = viewModel::onAction,
+        snackbarHostState = snackbarHostState,
         modifier = modifier,
     )
 }
@@ -60,6 +74,7 @@ fun BoardRoute(
 fun BoardScreen(
     state: BoardUiState,
     onAction: (BoardAction) -> Unit,
+    snackbarHostState: SnackbarHostState,
     modifier: Modifier = Modifier,
 ) {
     var newTaskTitle by remember { mutableStateOf("") }
@@ -67,6 +82,7 @@ fun BoardScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {

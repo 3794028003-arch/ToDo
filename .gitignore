@@ -4,6 +4,7 @@
 .idea/
 .vscode/
 *.iml
+# Machine-specific Android SDK and SYNC_BASE_URL settings.
 local.properties
 /work/
 .env
@@ -11,3 +12,5 @@ local.properties
 *.hprof
 .externalNativeBuild/
 .cxx/
+# Machine-generated Gradle daemon JVM criteria.
+android/gradle/gradle-daemon-jvm.properties

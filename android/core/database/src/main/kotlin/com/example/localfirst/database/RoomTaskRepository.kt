@@ -2,6 +2,7 @@ package com.example.localfirst.database
 
 import com.example.localfirst.data.Task
 import com.example.localfirst.data.TaskRepository
+import com.example.localfirst.data.ServerDeletionNotice
 import com.example.localfirst.sync.TaskStatus
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
@@ -15,8 +16,9 @@ class RoomTaskRepository(
     private val nowMillis: () -> Long = System::currentTimeMillis,
 ) : TaskRepository {
     private val mutations = RoomTaskMutationStore(database)
+    private val taskDao = database.taskDao()
 
-    override val tasks: Flow<List<Task>> = database.taskDao().observeActive().map { entities ->
+    override val tasks: Flow<List<Task>> = taskDao.observeActive().map { entities ->
         entities.map { entity ->
             Task(
                 id = entity.id,
@@ -25,6 +27,16 @@ class RoomTaskRepository(
             )
         }
     }
+
+    override val serverDeletionNotices: Flow<List<ServerDeletionNotice>> =
+        taskDao.observePendingServerDeletionNotices().map { entities ->
+            entities.map { entity ->
+                ServerDeletionNotice(
+                    taskId = entity.id,
+                    title = entity.title,
+                )
+            }
+        }
 
     override suspend fun createTask(title: String): String {
         val taskId = taskIdFactory()
@@ -62,6 +74,10 @@ class RoomTaskRepository(
             operationId = operationIdFactory(),
         )
         requestBackgroundSync()
+    }
+
+    override suspend fun dismissServerDeletionNotice(taskId: String) {
+        taskDao.dismissServerDeletionNotice(taskId)
     }
 
     private fun requestBackgroundSync() {

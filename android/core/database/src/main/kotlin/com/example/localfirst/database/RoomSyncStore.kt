@@ -82,6 +82,7 @@ class RoomSyncStore(
                     task.copy(
                         serverVersion = tombstoneVersion,
                         deletedAtMillis = deletedAtMillis,
+                        serverDeletionNoticePending = true,
                     ),
                 )
             }

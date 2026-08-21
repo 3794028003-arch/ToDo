@@ -1,12 +1,14 @@
 package com.example.localfirst.board
 
 import com.example.localfirst.data.Task
+import com.example.localfirst.data.ServerDeletionNotice
 import com.example.localfirst.sync.TaskStatus
 
 data class BoardUiState(
     val todo: List<Task> = emptyList(),
     val doing: List<Task> = emptyList(),
     val done: List<Task> = emptyList(),
+    val serverDeletionNotice: ServerDeletionNotice? = null,
 )
 
 sealed interface BoardAction {
@@ -23,4 +25,6 @@ sealed interface BoardAction {
     ) : BoardAction
 
     data class DeleteTask(val taskId: String) : BoardAction
+
+    data class DismissServerDeletionNotice(val taskId: String) : BoardAction
 }

@@ -40,3 +40,15 @@ dependencies {
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 }
+val kaptTempDir = layout.buildDirectory.dir("tmp/kapt")
+
+tasks.withType<org.jetbrains.kotlin.gradle.internal.KaptWithoutKotlincTask>().configureEach {
+    val tempPath = kaptTempDir.get().asFile.absolutePath
+
+    kaptProcessJvmArgs.add("-Djava.io.tmpdir=$tempPath")
+    kaptProcessJvmArgs.add("-Dorg.sqlite.tmpdir=$tempPath")
+
+    doFirst {
+        kaptTempDir.get().asFile.mkdirs()
+    }
+}

@@ -13,7 +13,21 @@ cd android
 ./gradlew :app:installDebug
 ```
 
-Debug 版本在 Android 模拟器中通过 `http://10.0.2.2:8080/` 访问本机后端。后端未启动或设备断网时，核心任务操作仍可正常使用。
+Debug 版本默认在 Android 模拟器中通过 `http://10.0.2.2:8080/` 访问本机后端。后端未启动或设备断网时，核心任务操作仍可正常使用。
+
+需要让真机与模拟器同时连接同一个本机后端时，在不会被 Git 跟踪的 `android/local.properties` 中增加以下配置（保留文件中已有的 `sdk.dir`，并将示例 IPv4 替换为电脑当前的局域网 IPv4）：
+
+```properties
+SYNC_BASE_URL=http://<电脑IPv4>:8080/
+```
+
+也可以只对单次 Gradle 命令传入属性；该方式的优先级高于 `local.properties`：
+
+```shell
+./gradlew :app:installDebug -PSYNC_BASE_URL=http://<电脑IPv4>:8080/
+```
+
+未配置 `SYNC_BASE_URL` 时仍使用模拟器默认地址 `http://10.0.2.2:8080/`。真机必须能够访问电脑的局域网 IPv4，电脑防火墙需允许 `8080` 端口，并且两台设备应处于可互通的网络中。`local.properties` 已列入 `.gitignore`，不要将个人局域网 IP 写入受 Git 跟踪的 Gradle 文件。
 
 ## 启动后端
 
