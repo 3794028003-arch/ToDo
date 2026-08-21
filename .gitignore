@@ -1,0 +1,13 @@
+.gradle/
+**/build/
+**/bin/
+.idea/
+.vscode/
+*.iml
+local.properties
+work/
+.env
+*.log
+*.hprof
+.externalNativeBuild/
+.cxx/
