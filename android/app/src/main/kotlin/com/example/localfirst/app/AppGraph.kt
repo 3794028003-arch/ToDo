@@ -7,6 +7,7 @@ import com.example.localfirst.data.TaskRepository
 import com.example.localfirst.database.RoomSyncStore
 import com.example.localfirst.database.RoomTaskRepository
 import com.example.localfirst.database.TaskDatabase
+import com.example.localfirst.database.MIGRATION_1_2
 import com.example.localfirst.network.RetrofitSyncApi
 import com.example.localfirst.sync.RetryPolicy
 import com.example.localfirst.sync.SyncClock
@@ -26,7 +27,7 @@ class AppGraph(
             applicationContext,
             TaskDatabase::class.java,
             DATABASE_NAME,
-        ).build()
+        ).addMigrations(MIGRATION_1_2).build()
     }
 
     private val syncStore by lazy { RoomSyncStore(database) }

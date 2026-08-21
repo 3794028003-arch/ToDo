@@ -1,8 +1,28 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.isFile) {
+        localPropertiesFile.inputStream().use(::load)
+    }
+}
+
+val debugSyncBaseUrl = providers.gradleProperty("SYNC_BASE_URL").orNull
+    ?.trim()
+    ?.takeIf(String::isNotEmpty)
+    ?: localProperties.getProperty("SYNC_BASE_URL")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+    ?: "http://10.0.2.2:8080/"
+
+fun String.asBuildConfigString(): String =
+    "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
 android {
     namespace = "com.example.localfirst.app"
@@ -29,7 +49,7 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField("String", "SYNC_BASE_URL", "\"http://10.0.2.2:8080/\"")
+            buildConfigField("String", "SYNC_BASE_URL", debugSyncBaseUrl.asBuildConfigString())
             manifestPlaceholders["usesCleartextTraffic"] = "true"
         }
         release {

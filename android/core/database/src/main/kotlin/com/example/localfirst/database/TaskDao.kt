@@ -15,4 +15,10 @@ interface TaskDao {
 
     @Query("SELECT * FROM tasks WHERE deletedAtMillis IS NULL ORDER BY id")
     fun observeActive(): Flow<List<TaskEntity>>
+
+    @Query("SELECT * FROM tasks WHERE serverDeletionNoticePending = 1 ORDER BY id")
+    fun observePendingServerDeletionNotices(): Flow<List<TaskEntity>>
+
+    @Query("UPDATE tasks SET serverDeletionNoticePending = 0 WHERE id = :taskId")
+    suspend fun dismissServerDeletionNotice(taskId: String)
 }
