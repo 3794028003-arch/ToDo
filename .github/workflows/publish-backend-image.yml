@@ -78,9 +78,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify Docker access
-        shell: powershell
+        shell: cmd
         run: docker version
 
       - name: Deploy latest backend image
-        shell: powershell
+        shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy-windows.ps1 -ImageTag latest
