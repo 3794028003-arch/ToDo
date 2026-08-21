@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -23,6 +24,7 @@ android {
 
     buildFeatures {
         buildConfig = true
+        compose = true
     }
 
     buildTypes {
@@ -48,8 +50,13 @@ dependencies {
     implementation(project(":core:network"))
     implementation(project(":core:sync"))
     implementation(project(":core:work"))
+    implementation(project(":feature:board"))
 
+    implementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.activity:activity-compose:1.10.1")
     implementation("androidx.activity:activity-ktx:1.10.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.work:work-runtime:2.11.2")
 

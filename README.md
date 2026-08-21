@@ -2,7 +2,18 @@
 
 一个仅包含 `TODO`、`DOING`、`DONE` 三种状态的 Android Local-First 任务看板。
 
-当前仓库已经完成数据层、持久化 Outbox、同步引擎、WorkManager、后端同步 API、灾难场景测试、ViewModel，以及可安装和启动的 Android 应用壳。Compose 看板 UI 尚未开始；只有在完整 CI 通过后才会进入 UI 阶段。
+当前仓库已提供可使用的 Compose 看板：用户可以离线新建、修改、删除任务，并在 `TODO`、`DOING`、`DONE` 之间移动。所有操作先事务写入 Room 与持久化 Outbox，再由 WorkManager 在网络可用时后台同步。
+
+## 运行 Android App
+
+使用 Android Studio 打开 `android` 目录，选择 `app` 配置后运行；也可以连接模拟器或真机后执行：
+
+```shell
+cd android
+./gradlew :app:installDebug
+```
+
+Debug 版本在 Android 模拟器中通过 `http://10.0.2.2:8080/` 访问本机后端。后端未启动或设备断网时，核心任务操作仍可正常使用。
 
 ## 启动后端
 
