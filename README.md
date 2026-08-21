@@ -73,3 +73,66 @@ cd backend
 ```
 
 GitHub Actions 在每次 `push` 和 `pull_request` 时执行相同的质量门禁。
+
+## 使用 GitHub 发布镜像部署
+
+### 环境要求
+
+目标电脑需要安装并启动 Docker Desktop。
+
+### 下载项目
+
+```powershell
+git clone https://github.com/3794028003-arch/ToDo.git
+cd ToDo
+
+```
+
+### 创建本机配置
+
+```powershell
+Copy-Item .env.example .env
+notepad .env
+```
+
+必须将 `POSTGRES_PASSWORD` 改成目标电脑自己的密码。`.env` 已被 Git 忽略，不会提交到仓库。
+
+### 启动 Backend 和 PostgreSQL
+
+```powershell
+docker compose -f docker-compose.release.yml pull
+docker compose -f docker-compose.release.yml up -d
+docker compose -f docker-compose.release.yml ps
+```
+
+两个服务都显示 `healthy` 后，验证 Backend：
+
+```powershell
+Invoke-WebRequest http://localhost:8080/actuator/health
+```
+
+预期返回 HTTP 200。
+
+### 真机连接
+
+手机与电脑必须处于同一局域网。Android 构建配置应使用：
+
+```properties
+SYNC_BASE_URL=http://<电脑IPv4>:8080/
+```
+
+例如电脑 IPv4 为 `192.168.1.100`：
+
+```properties
+SYNC_BASE_URL=http://192.168.1.100:8080/
+```
+
+不要将个人 IP 提交到 Git。当前 APK 的 Backend 地址在构建时确定，因此换到另一台电脑后，需要使用该电脑的 IPv4 重新构建 APK。
+
+### 停止服务
+
+```powershell
+docker compose -f docker-compose.release.yml down
+```
+
+该命令保留 PostgreSQL 数据卷。不要添加 `-v`，除非确定需要删除全部数据库数据。
