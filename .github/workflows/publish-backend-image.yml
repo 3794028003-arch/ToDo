@@ -54,3 +54,33 @@ jobs:
           labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  deploy-windows:
+    name: Deploy on Windows
+    needs:
+      - build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on:
+      - self-hosted
+      - Windows
+      - X64
+      - todo-deploy
+
+    permissions:
+      contents: read
+
+    concurrency:
+      group: todo-windows-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Verify Docker access
+        shell: powershell
+        run: docker version
+
+      - name: Deploy latest backend image
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy-windows.ps1 -ImageTag latest
