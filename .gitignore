@@ -5,7 +5,7 @@
 .vscode/
 *.iml
 local.properties
-work/
+/work/
 .env
 *.log
 *.hprof
