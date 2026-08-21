@@ -15,6 +15,7 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "local-first-task-android"
+include(":app")
 include(":core:sync")
 include(":core:data")
 include(":core:database")

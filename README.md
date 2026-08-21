@@ -2,7 +2,7 @@
 
 一个仅包含 `TODO`、`DOING`、`DONE` 三种状态的 Android Local-First 任务看板。
 
-当前仓库已经完成数据层、持久化 Outbox、同步引擎、WorkManager、后端同步 API、灾难场景测试和 ViewModel。Compose UI 尚未开始；只有在完整 CI 通过后才会进入 UI 阶段。
+当前仓库已经完成数据层、持久化 Outbox、同步引擎、WorkManager、后端同步 API、灾难场景测试、ViewModel，以及可安装和启动的 Android 应用壳。Compose 看板 UI 尚未开始；只有在完整 CI 通过后才会进入 UI 阶段。
 
 ## 启动后端
 
@@ -31,6 +31,13 @@ Android Lint 与 JVM 测试：
 ```shell
 cd android
 ./gradlew lint test
+```
+
+连接模拟器或真机后，验证应用启动并安装 Debug APK：
+
+```shell
+cd android
+./gradlew :app:connectedDebugAndroidTest :app:installDebug
 ```
 
 后端静态分析、测试与构建：
