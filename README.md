@@ -129,6 +129,21 @@ SYNC_BASE_URL=http://192.168.1.100:8080/
 
 不要将个人 IP 提交到 Git。当前 APK 的 Backend 地址在构建时确定，因此换到另一台电脑后，需要使用该电脑的 IPv4 重新构建 APK。
 
+### Windows 自动部署与回滚
+
+`main` 分支发布 Backend 镜像后，Windows Self-hosted Runner 会使用对应 Git 提交的不可变镜像标签（`sha-<完整提交 SHA>`）执行 `deploy-windows.ps1`。部署电脑需要保持 Docker Desktop 和 Runner 服务运行，并在 `C:\Deploy\ToDo\.env` 中保存不会提交到 Git 的部署配置。
+
+部署脚本在更新 Backend 前，会把当前正在运行的镜像保存为本机 `rollback-local` 镜像。新镜像拉取、容器启动或健康检查失败时，脚本会自动恢复该旧镜像并再次检查健康状态。回滚成功后，部署命令仍返回失败，使 GitHub Actions 正确标记这次发布失败，而不是误报成功。
+
+部署版本记录保存在：
+
+```text
+C:\Deploy\ToDo\deployed-version.txt
+C:\Deploy\ToDo\previous-deployed-version.txt
+```
+
+自动回滚只替换 Backend 镜像，不删除 PostgreSQL 容器或数据卷。数据库迁移不会自动反向执行，因此生产迁移必须保持向后兼容，并在高风险迁移前单独备份数据库。
+
 ### 停止服务
 
 ```powershell

@@ -42,7 +42,7 @@ jobs:
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=tag
-            type=sha,prefix=sha-
+            type=sha,format=long,prefix=sha-
 
       - name: Build and publish backend image
         uses: docker/build-push-action@v6
@@ -83,4 +83,4 @@ jobs:
 
       - name: Deploy latest backend image
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy-windows.ps1 -ImageTag latest
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File .\deploy-windows.ps1 -ImageTag sha-${{ github.sha }}
