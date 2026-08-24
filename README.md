@@ -133,6 +133,8 @@ SYNC_BASE_URL=http://192.168.1.100:8080/
 
 `main` 分支发布 Backend 镜像后，Windows Self-hosted Runner 会使用对应 Git 提交的不可变镜像标签（`sha-<完整提交 SHA>`）执行 `deploy-windows.ps1`。部署电脑需要保持 Docker Desktop 和 Runner 服务运行，并在 `C:\Deploy\ToDo\.env` 中保存不会提交到 Git 的部署配置。
 
+`Deploy on Windows` Job 使用 GitHub `production-windows` Environment。镜像构建完成后，Job 会等待 Required reviewer 批准；只有批准后，部署任务才会发送到 Windows Runner。该 Environment 还限制为仅允许 `main` 分支部署。
+
 部署脚本在更新 Backend 前，会把当前正在运行的镜像保存为本机 `rollback-local` 镜像。新镜像拉取、容器启动或健康检查失败时，脚本会自动恢复该旧镜像并再次检查健康状态。回滚成功后，部署命令仍返回失败，使 GitHub Actions 正确标记这次发布失败，而不是误报成功。
 
 部署版本记录保存在：
