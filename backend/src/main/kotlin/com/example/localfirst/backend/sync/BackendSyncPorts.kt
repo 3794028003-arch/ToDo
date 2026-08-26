@@ -11,7 +11,15 @@ interface IdempotencyExecutor {
 interface ServerTaskStore {
     fun find(taskId: String): ServerTask?
 
-    fun create(taskId: String, title: String): ServerTask
+    fun create(
+        taskId: String,
+        title: String,
+        reminderAtMillis: Long?,
+        reminderRepeat: String,
+        isPinned: Boolean,
+        startDateMillis: Long? = null,
+        dueDateMillis: Long? = null,
+    ): ServerTask
 
     fun changeStatus(
         taskId: String,
@@ -19,9 +27,14 @@ interface ServerTaskStore {
         expectedVersion: Long,
     ): ServerTask?
 
-    fun updateTitle(
+    fun updateDetails(
         taskId: String,
         title: String,
+        reminderAtMillis: Long?,
+        reminderRepeat: String?,
+        isPinned: Boolean?,
+        startDateMillis: Long? = null,
+        dueDateMillis: Long? = null,
         expectedVersion: Long,
     ): ServerTask?
 

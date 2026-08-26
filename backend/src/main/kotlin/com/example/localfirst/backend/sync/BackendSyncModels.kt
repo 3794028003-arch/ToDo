@@ -11,6 +11,11 @@ data class ServerTask(
     val title: String,
     val status: ServerTaskStatus,
     val version: Long,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeat: String = "NONE",
+    val isPinned: Boolean = false,
+    val startDateMillis: Long? = null,
+    val dueDateMillis: Long? = null,
     val deletedAtMillis: Long? = null,
 )
 
@@ -27,6 +32,11 @@ data class IncomingSyncOperation(
     val taskId: String,
     val type: ServerOperationType,
     val title: String? = null,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeat: String? = null,
+    val isPinned: Boolean? = null,
+    val startDateMillis: Long? = null,
+    val dueDateMillis: Long? = null,
     val desiredStatus: ServerTaskStatus? = null,
     val baseServerVersion: Long? = null,
 )

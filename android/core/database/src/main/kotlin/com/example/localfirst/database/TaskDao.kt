@@ -13,12 +13,52 @@ interface TaskDao {
     @Query("SELECT * FROM tasks WHERE id = :taskId LIMIT 1")
     suspend fun findById(taskId: String): TaskEntity?
 
-    @Query("SELECT * FROM tasks WHERE deletedAtMillis IS NULL ORDER BY id")
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE deletedAtMillis IS NULL
+        ORDER BY
+            isPinned DESC,
+            CASE WHEN lastModifiedSequence IS NULL THEN 1 ELSE 0 END,
+            lastModifiedSequence DESC,
+            createdSequence,
+            id
+        """,
+    )
     fun observeActive(): Flow<List<TaskEntity>>
 
-    @Query("SELECT * FROM tasks WHERE serverDeletionNoticePending = 1 ORDER BY id")
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE deletedAtMillis IS NOT NULL
+          AND permanentDeletionRequested = 0
+        ORDER BY deletedAtMillis DESC, id
+        """,
+    )
+    fun observeDeleted(): Flow<List<TaskEntity>>
+
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE serverDeletionNoticePending = 1
+        ORDER BY serverDeletionNoticeSequence, id
+        """,
+    )
     fun observePendingServerDeletionNotices(): Flow<List<TaskEntity>>
 
-    @Query("UPDATE tasks SET serverDeletionNoticePending = 0 WHERE id = :taskId")
+    @Query(
+        """
+        UPDATE tasks
+        SET serverDeletionNoticePending = 0,
+            serverDeletionNoticeSequence = NULL
+        WHERE id = :taskId
+        """,
+    )
     suspend fun dismissServerDeletionNotice(taskId: String)
+
+    @Query("UPDATE tasks SET permanentDeletionRequested = 1 WHERE id = :taskId AND deletedAtMillis IS NOT NULL")
+    suspend fun requestPermanentDeletion(taskId: String): Int
+
+    @Query("DELETE FROM tasks WHERE id = :taskId")
+    suspend fun deleteById(taskId: String)
 }

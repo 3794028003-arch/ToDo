@@ -153,6 +153,7 @@ class RoomBackedDisasterSyncTest {
         assertEquals(OperationState.SYNCED, store.operation("y-status")?.state)
         assertNotNull(store.task("task-x")?.deletedAtMillis)
         assertEquals(8L, store.task("task-x")?.serverVersion)
+        assertEquals(1L, database.taskDao().findById("task-x")?.serverDeletionNoticeSequence)
         assertEquals(1, api.attemptsFor("x-status"))
         assertEquals(0, api.attemptsFor("x-later-update"))
 
@@ -163,6 +164,56 @@ class RoomBackedDisasterSyncTest {
 
         repository.dismissServerDeletionNotice(notice.taskId)
         assertTrue(repository.serverDeletionNotices.first().isEmpty())
+        database.close()
+    }
+
+    @Test
+    fun serverDeletionNoticesFollowQueueSequenceInsteadOfTaskId() = runTest {
+        val database = fixture.open()
+        val mutations = RoomTaskMutationStore(database)
+        val taskIdsInOperationOrder = listOf("task-c", "task-a", "task-b")
+
+        taskIdsInOperationOrder.forEachIndexed { index, taskId ->
+            database.taskDao().upsert(taskEntity(taskId, serverVersion = 4))
+            mutations.changeStatusAndEnqueue(
+                taskId = taskId,
+                status = TaskStatus.DONE,
+                operationId = "status-$taskId",
+                queueSequence = (index + 10).toLong(),
+            )
+        }
+
+        val api = RecordingRoomSyncApi { operation, _ ->
+            PushResult.ServerDeleted(
+                operationId = operation.operationId,
+                deletedAtMillis = 5_000,
+                tombstoneVersion = 5,
+            )
+        }
+        val executor = RoomSyncExecutor(
+            database = database,
+            api = api,
+            clock = TestSyncClock(currentMillis = 1_000),
+            retryPolicy = RetryPolicy { 10_000 },
+        )
+
+        executor.drain()
+
+        val repository = RoomTaskRepository(database, scheduleSync = {})
+        assertEquals(
+            taskIdsInOperationOrder,
+            repository.serverDeletionNotices.first().map { notice -> notice.taskId },
+        )
+
+        repository.dismissServerDeletionNotice("task-c")
+        assertEquals(
+            listOf("task-a", "task-b"),
+            repository.serverDeletionNotices.first().map { notice -> notice.taskId },
+        )
+        assertEquals(
+            null,
+            database.taskDao().findById("task-c")?.serverDeletionNoticeSequence,
+        )
         database.close()
     }
 }

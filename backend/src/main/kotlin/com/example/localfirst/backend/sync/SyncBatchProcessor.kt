@@ -36,6 +36,11 @@ class SyncBatchProcessor(
                 changed = current ?: tasks.create(
                     taskId = operation.taskId,
                     title = requireNotNull(operation.title),
+                    reminderAtMillis = operation.reminderAtMillis,
+                    reminderRepeat = operation.reminderRepeat ?: "NONE",
+                    isPinned = operation.isPinned ?: false,
+                    startDateMillis = operation.startDateMillis,
+                    dueDateMillis = operation.dueDateMillis,
                 ),
             )
 
@@ -48,9 +53,14 @@ class SyncBatchProcessor(
             }
 
             ServerOperationType.UPDATE -> applyVersioned(operation, current) { expectedVersion ->
-                tasks.updateTitle(
+                tasks.updateDetails(
                     taskId = operation.taskId,
                     title = requireNotNull(operation.title),
+                    reminderAtMillis = operation.reminderAtMillis,
+                    reminderRepeat = operation.reminderRepeat,
+                    isPinned = operation.isPinned,
+                    startDateMillis = operation.startDateMillis,
+                    dueDateMillis = operation.dueDateMillis,
                     expectedVersion = expectedVersion,
                 )
             }

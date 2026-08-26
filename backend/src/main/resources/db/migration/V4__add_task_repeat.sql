@@ -1,0 +1,2 @@
+ALTER TABLE tasks
+    ADD COLUMN reminder_repeat VARCHAR(16) NOT NULL DEFAULT 'NONE';

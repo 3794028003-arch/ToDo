@@ -16,6 +16,12 @@ interface SyncOperationDao {
     @Query("SELECT * FROM sync_operations WHERE operationId = :operationId LIMIT 1")
     suspend fun findById(operationId: String): SyncOperationEntity?
 
+    @Query("SELECT * FROM sync_operations WHERE taskId = :taskId ORDER BY queueSequence DESC LIMIT 1")
+    suspend fun latestForTask(taskId: String): SyncOperationEntity?
+
+    @Query("DELETE FROM sync_operations WHERE taskId = :taskId")
+    suspend fun deleteForTask(taskId: String)
+
     @Query("SELECT COALESCE(MAX(queueSequence), 0) + 1 FROM sync_operations")
     suspend fun nextQueueSequence(): Long
 

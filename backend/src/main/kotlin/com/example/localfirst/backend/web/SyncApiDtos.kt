@@ -15,6 +15,11 @@ data class SyncOperationRequest(
     val taskId: String,
     val type: ServerOperationType,
     val title: String? = null,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeat: String? = null,
+    val isPinned: Boolean? = null,
+    val startDateMillis: Long? = null,
+    val dueDateMillis: Long? = null,
     val desiredStatus: ServerTaskStatus? = null,
     val baseServerVersion: Long? = null,
 ) {
@@ -24,6 +29,11 @@ data class SyncOperationRequest(
         taskId = taskId,
         type = type,
         title = title,
+        reminderAtMillis = reminderAtMillis,
+        reminderRepeat = reminderRepeat,
+        isPinned = isPinned,
+        startDateMillis = startDateMillis,
+        dueDateMillis = dueDateMillis,
         desiredStatus = desiredStatus,
         baseServerVersion = baseServerVersion,
     )

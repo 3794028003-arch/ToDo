@@ -3,6 +3,7 @@ package com.example.localfirst.database
 import androidx.room.withTransaction
 import com.example.localfirst.sync.LocalTask
 import com.example.localfirst.sync.OperationState
+import com.example.localfirst.sync.OperationType
 import com.example.localfirst.sync.SyncOperation
 import com.example.localfirst.sync.SyncStore
 
@@ -43,7 +44,12 @@ class RoomSyncStore(
                 syncedState = OperationState.SYNCED,
             )
             database.taskDao().findById(operation.taskId)?.let { task ->
-                database.taskDao().upsert(task.copy(serverVersion = serverVersion))
+                if (operation.type == OperationType.DELETE && task.permanentDeletionRequested) {
+                    database.syncOperationDao().deleteForTask(operation.taskId)
+                    database.taskDao().deleteById(operation.taskId)
+                } else {
+                    database.taskDao().upsert(task.copy(serverVersion = serverVersion))
+                }
             }
         }
     }
@@ -78,13 +84,13 @@ class RoomSyncStore(
                 resolvedState = OperationState.RESOLVED_CONFLICT,
             )
             database.taskDao().findById(taskId)?.let { task ->
-                database.taskDao().upsert(
-                    task.copy(
+                val deletedTask = task.copy(
                         serverVersion = tombstoneVersion,
                         deletedAtMillis = deletedAtMillis,
                         serverDeletionNoticePending = true,
-                    ),
-                )
+                        serverDeletionNoticeSequence = operation.queueSequence,
+                    )
+                database.taskDao().upsert(deletedTask)
             }
             database.syncOperationDao().supersedeLaterOperations(
                 taskId = taskId,
@@ -93,6 +99,10 @@ class RoomSyncStore(
                 supersededState = OperationState.SUPERSEDED,
                 errorCode = SERVER_DELETED_ERROR_CODE,
             )
+            database.taskDao().findById(taskId)?.takeIf(TaskEntity::permanentDeletionRequested)?.let {
+                database.syncOperationDao().deleteForTask(taskId)
+                database.taskDao().deleteById(taskId)
+            }
         }
     }
 

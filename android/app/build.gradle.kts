@@ -37,8 +37,8 @@ android {
         applicationId = "com.example.localfirst"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -80,10 +80,16 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.work:work-runtime:2.11.2")
 
+    testImplementation("junit:junit:4.13.2")
+
     androidTestImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.7.0")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation("androidx.test:core-ktx:1.7.0")
     androidTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

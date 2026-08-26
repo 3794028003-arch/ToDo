@@ -55,6 +55,8 @@ class RetrofitSyncApiTest {
                 taskId = "task-create",
                 type = OperationType.CREATE,
                 title = "Created offline",
+                reminderAtMillis = 1_900_000_000_000,
+                isPinned = true,
             ),
             operation(
                 operationId = "deleted-1",
@@ -83,6 +85,11 @@ class RetrofitSyncApiTest {
         assertEquals(3, requestOperations.size())
         assertEquals("CREATE", requestOperations[0].asJsonObject["type"].asString)
         assertEquals("Created offline", requestOperations[0].asJsonObject["title"].asString)
+        assertEquals(
+            1_900_000_000_000,
+            requestOperations[0].asJsonObject["reminderAtMillis"].asLong,
+        )
+        assertTrue(requestOperations[0].asJsonObject["isPinned"].asBoolean)
         assertEquals("DONE", requestOperations[1].asJsonObject["desiredStatus"].asString)
         assertEquals(8L, requestOperations[1].asJsonObject["baseServerVersion"].asLong)
         val requestHash = requestOperations[0].asJsonObject["requestHash"].asString
@@ -109,6 +116,8 @@ class RetrofitSyncApiTest {
         taskId: String,
         type: OperationType,
         title: String? = null,
+        reminderAtMillis: Long? = null,
+        isPinned: Boolean? = null,
         desiredStatus: TaskStatus? = null,
         baseServerVersion: Long? = null,
     ): SyncOperation = SyncOperation(
@@ -118,6 +127,8 @@ class RetrofitSyncApiTest {
         taskRevision = 1,
         type = type,
         title = title,
+        reminderAtMillis = reminderAtMillis,
+        isPinned = isPinned,
         desiredStatus = desiredStatus,
         baseServerVersion = baseServerVersion,
     )

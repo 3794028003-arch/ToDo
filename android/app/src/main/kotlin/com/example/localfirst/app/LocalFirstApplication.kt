@@ -13,6 +13,8 @@ class LocalFirstApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        ensureReminderChannel(this)
         graph.scheduleSync()
+        graph.rescheduleReminders()
     }
 }

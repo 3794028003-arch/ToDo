@@ -17,6 +17,11 @@ internal data class SyncOperationRequest(
     val taskId: String,
     val type: OperationType,
     val title: String?,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeat: String? = null,
+    val isPinned: Boolean? = null,
+    val startDateMillis: Long? = null,
+    val dueDateMillis: Long? = null,
     val desiredStatus: TaskStatus?,
     val baseServerVersion: Long?,
 )
@@ -39,6 +44,11 @@ internal fun SyncOperation.toRequest(): SyncOperationRequest = SyncOperationRequ
     taskId = taskId,
     type = type,
     title = title,
+    reminderAtMillis = reminderAtMillis,
+    reminderRepeat = reminderRepeat,
+    isPinned = isPinned,
+    startDateMillis = startDateMillis,
+    dueDateMillis = dueDateMillis,
     desiredStatus = desiredStatus,
     baseServerVersion = baseServerVersion,
 )
@@ -64,15 +74,59 @@ internal fun SyncOperationResponse.toDomain(): PushResult = when (status) {
 }
 
 private fun SyncOperation.requestHash(): String {
-    val canonicalFields = listOf(
-        "v1",
-        operationId,
-        taskId,
-        type.name,
-        title,
-        desiredStatus?.name,
-        baseServerVersion?.toString(),
-    ).joinToString(separator = "") { value ->
+    val fields = if (startDateMillis != null || dueDateMillis != null) {
+        listOf(
+            "v5",
+            operationId,
+            taskId,
+            type.name,
+            title,
+            reminderAtMillis?.toString(),
+            reminderRepeat,
+            isPinned?.toString(),
+            startDateMillis?.toString(),
+            dueDateMillis?.toString(),
+            desiredStatus?.name,
+            baseServerVersion?.toString(),
+        )
+    } else if (reminderRepeat == null && isPinned == null) {
+        listOf(
+            "v2",
+            operationId,
+            taskId,
+            type.name,
+            title,
+            reminderAtMillis?.toString(),
+            desiredStatus?.name,
+            baseServerVersion?.toString(),
+        )
+    } else if (reminderRepeat == null) {
+        listOf(
+            "v3",
+            operationId,
+            taskId,
+            type.name,
+            title,
+            reminderAtMillis?.toString(),
+            isPinned.toString(),
+            desiredStatus?.name,
+            baseServerVersion?.toString(),
+        )
+    } else {
+        listOf(
+            "v4",
+            operationId,
+            taskId,
+            type.name,
+            title,
+            reminderAtMillis?.toString(),
+            reminderRepeat,
+            isPinned?.toString(),
+            desiredStatus?.name,
+            baseServerVersion?.toString(),
+        )
+    }
+    val canonicalFields = fields.joinToString(separator = "") { value ->
         value?.let { "${it.length}:$it" } ?: "-1:"
     }
     return MessageDigest.getInstance("SHA-256")
