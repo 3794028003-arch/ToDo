@@ -11,6 +11,8 @@ interface IdempotencyExecutor {
 interface ServerTaskStore {
     fun find(taskId: String): ServerTask?
 
+    fun listByPrefix(taskIdPrefix: String): List<ServerTask> = emptyList()
+
     fun create(
         taskId: String,
         title: String,

@@ -12,6 +12,16 @@ import org.springframework.stereotype.Repository
 class JdbcServerTaskStore(
     private val jdbcClient: JdbcClient,
 ) : ServerTaskStore {
+    override fun listByPrefix(taskIdPrefix: String): List<ServerTask> = jdbcClient.sql(
+        """
+        SELECT id, title, status, version, reminder_at_millis, reminder_repeat,
+               is_pinned, start_date_millis, due_date_millis, deleted_at_millis
+        FROM tasks
+        WHERE id LIKE :prefix
+        ORDER BY id
+        """.trimIndent(),
+    ).param("prefix", "$taskIdPrefix%").query(TASK_ROW_MAPPER).list()
+
     override fun find(taskId: String): ServerTask? = jdbcClient.sql(
         """
         SELECT id, title, status, version, reminder_at_millis, reminder_repeat,

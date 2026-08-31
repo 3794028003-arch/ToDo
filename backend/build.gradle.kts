@@ -34,6 +34,7 @@ dependencies {
     add("implementation", "org.springframework.boot:spring-boot-starter-jdbc")
     add("implementation", "org.springframework.boot:spring-boot-starter-flyway")
     add("implementation", "org.springframework.boot:spring-boot-starter-actuator")
+    add("implementation", "org.springframework.security:spring-security-crypto")
     add("implementation", "com.fasterxml.jackson.module:jackson-module-kotlin")
     add("implementation", "org.jetbrains.kotlin:kotlin-reflect")
 
