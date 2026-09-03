@@ -25,7 +25,10 @@ import org.testcontainers.junit.jupiter.Testcontainers
 import org.testcontainers.postgresql.PostgreSQLContainer
 
 @Testcontainers
-@SpringBootTest(classes = [LocalFirstTaskBackendApplication::class], properties = ["doti.allow-unauthenticated-sync=true"])
+@SpringBootTest(
+    classes = [LocalFirstTaskBackendApplication::class],
+    properties = ["doti.allow-unauthenticated-sync=true"],
+)
 @AutoConfigureMockMvc
 class PostgreSqlSyncApiDisasterTest {
     @Autowired

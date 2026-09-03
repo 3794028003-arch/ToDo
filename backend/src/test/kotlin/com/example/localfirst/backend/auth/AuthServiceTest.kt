@@ -69,7 +69,7 @@ private class FakeAuthStore : AuthStore {
     override fun latestCode(contact: String, purpose: VerificationPurpose) =
         codes.filter { it.contact == contact && it.purpose == purpose }.maxByOrNull { it.createdAtMillis }
     override fun saveCode(code: StoredVerificationCode) { codes += code }
-    override fun markCodeFailure(id: String) { }
+    override fun markCodeFailure(id: String) = Unit
     override fun consumeCode(id: String, usedAtMillis: Long) {
         val index = codes.indexOfFirst { it.id == id }
         codes[index] = codes[index].copy(usedAtMillis = usedAtMillis)
