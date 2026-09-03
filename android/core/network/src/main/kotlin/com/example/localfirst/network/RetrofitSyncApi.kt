@@ -7,6 +7,7 @@ import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.POST
+import okhttp3.OkHttpClient
 
 class RetrofitSyncApi private constructor(
     private val service: SyncBatchService,
@@ -17,9 +18,17 @@ class RetrofitSyncApi private constructor(
         ).results.map(SyncOperationResponse::toDomain)
 
     companion object {
-        fun create(baseUrl: String): RetrofitSyncApi {
+        fun create(baseUrl: String, tokenProvider: () -> String? = { null }): RetrofitSyncApi {
+            val client = OkHttpClient.Builder().addInterceptor { chain ->
+                val token = tokenProvider()
+                val request = chain.request().newBuilder().apply {
+                    if (!token.isNullOrBlank()) header("Authorization", "Bearer $token")
+                }.build()
+                chain.proceed(request)
+            }.build()
             val service = Retrofit.Builder()
                 .baseUrl(baseUrl.ensureTrailingSlash())
+                .client(client)
                 .addConverterFactory(GsonConverterFactory.create())
                 .build()
                 .create(SyncBatchService::class.java)

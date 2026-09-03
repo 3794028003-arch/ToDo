@@ -9,8 +9,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
@@ -27,6 +30,52 @@ import org.junit.runner.Description
 class BoardViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
+
+    @Test
+    fun pullToRefreshRunsAccountSyncOnceAndExposesRefreshingState() = runTest {
+        val repository = FakeTaskRepository(emptyList())
+        var refreshCalls = 0
+        val releaseRefresh = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val viewModel = BoardViewModel(
+            repository = repository,
+            refresher = BoardRefresher {
+                refreshCalls += 1
+                releaseRefresh.await()
+            },
+        )
+
+        viewModel.onAction(BoardAction.RefreshBoard)
+        viewModel.onAction(BoardAction.RefreshBoard)
+        runCurrent()
+
+        assertEquals(1, refreshCalls)
+        assertEquals(true, viewModel.state.value.isRefreshing)
+
+        releaseRefresh.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.state.value.isRefreshing)
+    }
+
+    @Test
+    fun failedPullToRefreshStopsIndicatorAndShowsFriendlyMessage() = runTest {
+        val viewModel = BoardViewModel(
+            repository = FakeTaskRepository(emptyList()),
+            refresher = BoardRefresher { error("Connection refused at 192.168.0.1") },
+        )
+        val effect = backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) {
+            assertEquals(
+                BoardEffect.ShowRefreshMessage("同步失败，请检查网络后重试"),
+                viewModel.effects.first(),
+            )
+        }
+
+        viewModel.onAction(BoardAction.RefreshBoard)
+        advanceUntilIdle()
+
+        assertEquals(false, viewModel.state.value.isRefreshing)
+        effect.cancel()
+    }
 
     @Test
     fun repositoryTasksAreGroupedIntoThreeBoardColumns() = runTest {
@@ -66,7 +115,7 @@ class BoardViewModelTest {
     }
 
     @Test
-    fun onlyOneTaskActionBarIsExpandedAndPinningUsesRepository() = runTest {
+    fun longPressEntrySelectsOnlyThePressedTaskForBatchEditing() = runTest {
         val repository = FakeTaskRepository(
             listOf(
                 Task("ordinary", "Ordinary", TaskStatus.TODO),
@@ -76,21 +125,10 @@ class BoardViewModelTest {
         val viewModel = BoardViewModel(repository)
         advanceUntilIdle()
 
-        viewModel.onAction(BoardAction.ToggleTaskActions("ordinary"))
+        viewModel.onAction(BoardAction.StartBatchEdit("ordinary"))
         advanceUntilIdle()
-        assertEquals("ordinary", viewModel.state.value.expandedTaskId)
-        viewModel.onAction(BoardAction.ToggleTaskActions("important"))
-        advanceUntilIdle()
-        assertEquals("important", viewModel.state.value.expandedTaskId)
-
-        val important = viewModel.state.value.todo.first { it.id == "important" }
-        viewModel.onAction(BoardAction.SetPinned(important, true))
-        advanceUntilIdle()
-
-        assertEquals(null, viewModel.state.value.expandedTaskId)
-        assertEquals("important", viewModel.state.value.todo.first().id)
-        assertEquals(true, viewModel.state.value.todo.first().isPinned)
-        assertEquals("pin:true", repository.calls.last())
+        assertEquals(true, viewModel.state.value.isBatchEditing)
+        assertEquals(setOf("ordinary"), viewModel.state.value.selectedTaskIds)
     }
 
     @Test
@@ -171,7 +209,7 @@ class BoardViewModelTest {
         ))
         val viewModel = BoardViewModel(repository)
         advanceUntilIdle()
-        viewModel.onAction(BoardAction.StartBatchEdit)
+        viewModel.onAction(BoardAction.StartBatchEdit("todo-1"))
         viewModel.onAction(BoardAction.ToggleSelectAll)
         viewModel.onAction(BoardAction.BatchMove(TaskStatus.DONE))
         repeat(10) { viewModel.onAction(BoardAction.BatchMove(TaskStatus.DONE)) }
@@ -204,6 +242,8 @@ class BoardViewModelTest {
         val task = Task("quick", "Quick complete", TaskStatus.TODO)
         val repository = FakeTaskRepository(listOf(task))
         val viewModel = BoardViewModel(repository)
+        val effects = mutableListOf<BoardEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.effects.collect(effects::add) }
         advanceUntilIdle()
 
         repeat(20) { viewModel.onAction(BoardAction.QuickComplete(task)) }
@@ -213,6 +253,7 @@ class BoardViewModelTest {
         advanceUntilIdle()
 
         assertEquals(1, repository.calls.count { it == "move" })
+        assertEquals(listOf(BoardEffect.ShowStatusMessage("任务“Quick complete”已完成")), effects)
         assertEquals(setOf("quick"), viewModel.state.value.transientCompletedTaskIds)
         assertEquals(listOf("quick"), viewModel.state.value.todo.map(Task::id))
         assertEquals(listOf("quick"), viewModel.state.value.done.map(Task::id))
@@ -222,6 +263,55 @@ class BoardViewModelTest {
         assertEquals(emptySet<String>(), viewModel.state.value.transientCompletedTaskIds)
         assertEquals(emptyList<Task>(), viewModel.state.value.todo)
         assertEquals(listOf("quick"), viewModel.state.value.done.map(Task::id))
+    }
+
+    @Test
+    fun todoQuickAdvanceMovesToDoingOnlyOnce() = runTest {
+        val task = Task("advance", "Advance", TaskStatus.TODO)
+        val repository = FakeTaskRepository(listOf(task))
+        val viewModel = BoardViewModel(repository)
+        val effects = mutableListOf<BoardEffect>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.effects.collect(effects::add) }
+        advanceUntilIdle()
+
+        repeat(20) { viewModel.onAction(BoardAction.QuickAdvance(task)) }
+        advanceUntilIdle()
+
+        assertEquals(1, repository.calls.count { it == "move" })
+        assertEquals(listOf("advance"), viewModel.state.value.doing.map(Task::id))
+        assertEquals(listOf(BoardEffect.ShowStatusMessage("任务“Advance”正在进行中")), effects)
+    }
+
+    @Test
+    fun batchUndoMovesDoingBackToTodo() = runTest {
+        val task = Task("doing", "Undo", TaskStatus.DOING)
+        val repository = FakeTaskRepository(listOf(task))
+        val viewModel = BoardViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onAction(BoardAction.SelectStatus(TaskStatus.DOING))
+        viewModel.onAction(BoardAction.StartBatchEdit(task.id))
+        viewModel.onAction(BoardAction.BatchMove(TaskStatus.TODO))
+        advanceUntilIdle()
+
+        assertEquals(listOf("doing"), viewModel.state.value.todo.map(Task::id))
+        assertEquals(false, viewModel.state.value.isBatchEditing)
+    }
+
+    @Test
+    fun reorderIsPersistedOnlyForTheCurrentBatchPage() = runTest {
+        val repository = FakeTaskRepository(listOf(
+            Task("first", "First", TaskStatus.TODO),
+            Task("second", "Second", TaskStatus.TODO),
+            Task("doing", "Doing", TaskStatus.DOING),
+        ))
+        val viewModel = BoardViewModel(repository)
+        advanceUntilIdle()
+        viewModel.onAction(BoardAction.StartBatchEdit("first"))
+        viewModel.onAction(BoardAction.ReorderTasks(listOf("second", "first")))
+        advanceUntilIdle()
+
+        assertEquals(listOf("second", "first"), viewModel.state.value.todo.map(Task::id))
+        assertEquals("reorder:second,first", repository.calls.last())
     }
 
     @Test
@@ -315,21 +405,29 @@ class BoardViewModelTest {
     }
 
     @Test
-    fun serverDeletionNoticeIsExposedUntilTheUiDismissesIt() = runTest {
+    fun serverDeletionNoticesAreBatchedUntilTheUiAcknowledgesThem() = runTest {
         val repository = FakeTaskRepository(emptyList())
         val viewModel = BoardViewModel(repository)
-        val notice = ServerDeletionNotice("deleted-task", "Offline task")
+        val first = ServerDeletionNotice("deleted-task-1", "Offline task", 1_000L)
+        val second = ServerDeletionNotice("deleted-task-2", "Another task", 2_000L)
 
-        repository.publishServerDeletionNotice(notice)
+        repository.publishServerDeletionNotice(first)
+        repository.publishServerDeletionNotice(second)
         advanceUntilIdle()
 
-        assertEquals(notice, viewModel.state.value.serverDeletionNotice)
+        assertEquals(listOf(first, second), viewModel.state.value.serverDeletionNotices)
 
-        viewModel.onAction(BoardAction.DismissServerDeletionNotice(notice.taskId))
+        viewModel.onAction(
+            BoardAction.AcknowledgeServerDeletionNotices(
+                taskIds = setOf(first.taskId, second.taskId),
+                openRecycleBin = true,
+            ),
+        )
         advanceUntilIdle()
 
-        assertEquals(null, viewModel.state.value.serverDeletionNotice)
-        assertEquals("dismiss-notice", repository.calls.last())
+        assertEquals(emptyList<ServerDeletionNotice>(), viewModel.state.value.serverDeletionNotices)
+        assertEquals(true, viewModel.state.value.isRecycleBinOpen)
+        assertEquals(1, repository.calls.count { it == "dismiss-notices:2" })
     }
 }
 
@@ -427,6 +525,15 @@ private class FakeTaskRepository(
         }
     }
 
+    override suspend fun reorderTasks(taskIdsInDisplayOrder: List<String>) {
+        calls += "reorder:${taskIdsInDisplayOrder.joinToString(",")}"
+        val order = taskIdsInDisplayOrder.withIndex().associate { it.value to it.index }
+        mutableTasks.value = mutableTasks.value.sortedWith(
+            compareBy<Task> { order[it.id] ?: Int.MAX_VALUE }
+                .thenBy { task -> mutableTasks.value.indexOfFirst { it.id == task.id } },
+        )
+    }
+
     override suspend fun deleteTask(taskId: String) {
         calls += "delete"
         mutableTasks.value.firstOrNull { it.id == taskId }?.let {
@@ -440,10 +547,10 @@ private class FakeTaskRepository(
         mutableDeletedTasks.value = mutableDeletedTasks.value.filterNot { task -> task.id == taskId }
     }
 
-    override suspend fun dismissServerDeletionNotice(taskId: String) {
-        calls += "dismiss-notice"
+    override suspend fun dismissServerDeletionNotices(taskIds: Set<String>) {
+        calls += "dismiss-notices:${taskIds.size}"
         mutableServerDeletionNotices.value = mutableServerDeletionNotices.value.filterNot {
-            notice -> notice.taskId == taskId
+            notice -> notice.taskId in taskIds
         }
     }
 

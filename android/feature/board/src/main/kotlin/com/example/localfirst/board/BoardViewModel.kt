@@ -18,28 +18,34 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class BoardViewModel(
     private val repository: TaskRepository,
+    private val refresher: BoardRefresher = BoardRefresher {},
     private val nowMillis: () -> Long = System::currentTimeMillis,
     private val zoneId: ZoneId = ZoneId.systemDefault(),
 ) : ViewModel() {
     private val presentation = MutableStateFlow(BoardPresentationState())
     private val mutableEffects = MutableSharedFlow<BoardEffect>(extraBufferCapacity = 1)
     val effects = mutableEffects.asSharedFlow()
+    private var reorderJob: Job? = null
     val state: StateFlow<BoardUiState> = combine(
         repository.tasks,
         repository.deletedTasks,
         repository.serverDeletionNotices,
         presentation,
     ) { tasks, deletedTasks, notices, ui ->
-            tasks.toBoardUiState(deletedTasks, notices.firstOrNull(), ui)
+            tasks.toBoardUiState(deletedTasks, notices, ui)
         }.stateIn(viewModelScope, SharingStarted.Eagerly, BoardUiState())
 
     fun onAction(action: BoardAction) {
         when (action) {
-            is BoardAction.SelectStatus -> update { copy(selectedStatus = action.status, expandedTaskId = null, selectedTaskIds = emptySet()) }
+            is BoardAction.SelectStatus -> update {
+                if (isBatchEditing) this
+                else copy(selectedStatus = action.status, expandedTaskId = null, selectedTaskIds = emptySet())
+            }
             BoardAction.StartSearch -> update { copy(isSearching = true, isMainMenuOpen = false, expandedTaskId = null) }
             is BoardAction.UpdateSearch -> update { copy(searchQuery = action.query) }
             BoardAction.ExitSearch -> update { copy(isSearching = false, searchQuery = "") }
@@ -84,7 +90,10 @@ class BoardViewModel(
                     update { copy(operationConfirmation = OperationConfirmation.PermanentDeleteMany(ids)) }
                 }
             }
-            BoardAction.StartBatchEdit -> update { copy(isBatchEditing = true, isMainMenuOpen = false, expandedTaskId = null, selectedTaskIds = emptySet()) }
+            is BoardAction.StartBatchEdit -> update {
+                if (isBatchEditing || action.taskId in busyTaskIds) this
+                else copy(isBatchEditing = true, isMainMenuOpen = false, expandedTaskId = null, selectedTaskIds = setOf(action.taskId))
+            }
             BoardAction.CancelBatchEdit -> update { if (isBatchOperationRunning) this else copy(isBatchEditing = false, selectedTaskIds = emptySet()) }
             is BoardAction.ToggleBatchSelection -> update {
                 if (!isBatchEditing || isBatchOperationRunning) this else copy(selectedTaskIds = selectedTaskIds.toggle(action.taskId))
@@ -97,7 +106,7 @@ class BoardViewModel(
                 if (!presentation.value.isBatchOperationRunning) update { copy(operationConfirmation = OperationConfirmation.BatchDelete(ids)) }
             }
             is BoardAction.BatchMove -> runBatchMove(action.status)
-            is BoardAction.ToggleTaskActions -> update { if (isBatchEditing) this else copy(expandedTaskId = action.taskId.takeUnless { it == expandedTaskId }) }
+            is BoardAction.ReorderTasks -> reorderTasks(action.orderedTaskIds)
             BoardAction.CloseTaskActions -> update { copy(expandedTaskId = null) }
             is BoardAction.SetPinned -> runTaskMutation(action.task.id) { repository.setPinned(action.task.id, action.isPinned) }
             BoardAction.OpenCreate -> update { copy(editor = TaskEditorState(), showDiscardConfirmation = false, expandedTaskId = null, datePickerTarget = null) }
@@ -130,8 +139,9 @@ class BoardViewModel(
             BoardAction.ConfirmDiscardEditor -> update { copy(editor = null, showTimePicker = false, showRepeatPicker = false, datePickerTarget = null, showDiscardConfirmation = false) }
             is BoardAction.RequestMove -> update { copy(operationConfirmation = OperationConfirmation.Move(action.task, action.status), expandedTaskId = null) }
             is BoardAction.MoveImmediately -> runTaskMutation(action.task.id) { repository.changeStatus(action.task.id, action.status) }
+            is BoardAction.QuickAdvance -> quickAdvance(action.task)
             is BoardAction.QuickComplete -> quickComplete(action.task)
-            BoardAction.RefreshBoard -> update { copy(transientCompletedTasks = emptyMap(), expandedTaskId = null) }
+            BoardAction.RefreshBoard -> refreshBoard()
             is BoardAction.RequestDelete -> update { copy(operationConfirmation = OperationConfirmation.Delete(action.task), expandedTaskId = null) }
             is BoardAction.RequestPermanentDelete -> update {
                 if (action.task.id in busyTaskIds) this
@@ -140,7 +150,34 @@ class BoardViewModel(
             BoardAction.ConfirmOperation -> confirmOperation()
             BoardAction.CancelOperation -> update { copy(operationConfirmation = null) }
             BoardAction.HighlightConsumed -> update { copy(highlightRequest = null) }
-            is BoardAction.DismissServerDeletionNotice -> viewModelScope.launch { repository.dismissServerDeletionNotice(action.taskId) }
+            is BoardAction.AcknowledgeServerDeletionNotices -> {
+                if (action.openRecycleBin) update {
+                    copy(isRecycleBinOpen = true, isMainMenuOpen = false, expandedTaskId = null)
+                }
+                viewModelScope.launch {
+                    repository.dismissServerDeletionNotices(action.taskIds)
+                }
+            }
+        }
+    }
+
+    private fun refreshBoard() {
+        if (presentation.value.isRefreshing) return
+        update {
+            copy(
+                isRefreshing = true,
+                transientCompletedTasks = emptyMap(),
+                expandedTaskId = null,
+            )
+        }
+        viewModelScope.launch {
+            try {
+                refresher.refresh()
+            } catch (_: Exception) {
+                mutableEffects.emit(BoardEffect.ShowRefreshMessage("同步失败，请检查网络后重试"))
+            } finally {
+                update { copy(isRefreshing = false) }
+            }
         }
     }
 
@@ -204,6 +241,15 @@ class BoardViewModel(
         if (ids.isNotEmpty()) runBatch(ids) { repository.changeStatus(it, status) }
     }
 
+    private fun reorderTasks(orderedTaskIds: List<String>) {
+        val ui = presentation.value
+        if (!ui.isBatchEditing || ui.isBatchOperationRunning || orderedTaskIds.distinct().size != orderedTaskIds.size) return
+        val currentIds = state.value.tasksFor(ui.selectedStatus).map(Task::id)
+        if (orderedTaskIds.toSet() != currentIds.toSet() || orderedTaskIds == currentIds) return
+        reorderJob?.cancel()
+        reorderJob = viewModelScope.launch { repository.reorderTasks(orderedTaskIds) }
+    }
+
     private fun runRecycleBinBatchPermanentDelete(ids: Set<String>) {
         if (presentation.value.isRecycleBinOperationRunning || ids.isEmpty()) return
         update { copy(isRecycleBinOperationRunning = true, selectedDeletedTaskIds = emptySet()) }
@@ -249,8 +295,23 @@ class BoardViewModel(
         viewModelScope.launch {
             try {
                 repository.changeStatus(task.id, TaskStatus.DONE)
+                mutableEffects.emit(BoardEffect.ShowStatusMessage("任务“${task.title}”已完成"))
             } catch (_: Exception) {
                 update { copy(transientCompletedTasks = transientCompletedTasks - task.id) }
+            } finally {
+                update { copy(busyTaskIds = busyTaskIds - task.id) }
+            }
+        }
+    }
+
+    private fun quickAdvance(task: Task) {
+        val ui = presentation.value
+        if (task.status != TaskStatus.TODO || task.id in ui.busyTaskIds || task.id in ui.transientCompletedTasks) return
+        update { copy(busyTaskIds = busyTaskIds + task.id, expandedTaskId = null) }
+        viewModelScope.launch {
+            try {
+                repository.changeStatus(task.id, TaskStatus.DOING)
+                mutableEffects.emit(BoardEffect.ShowStatusMessage("任务“${task.title}”正在进行中"))
             } finally {
                 update { copy(busyTaskIds = busyTaskIds - task.id) }
             }
@@ -262,7 +323,7 @@ class BoardViewModel(
 
 private data class BoardPresentationState(
     val selectedStatus: TaskStatus = TaskStatus.TODO, val isSearching: Boolean = false, val searchQuery: String = "",
-    val isDarkMode: Boolean = false, val isMainMenuOpen: Boolean = false, val expandedTaskId: String? = null,
+    val isDarkMode: Boolean = true, val isMainMenuOpen: Boolean = false, val expandedTaskId: String? = null,
     val busyTaskIds: Set<String> = emptySet(), val editor: TaskEditorState? = null,
     val showTimePicker: Boolean = false, val showRepeatPicker: Boolean = false, val showDiscardConfirmation: Boolean = false,
     val operationConfirmation: OperationConfirmation? = null, val highlightRequest: HighlightRequest? = null,
@@ -274,11 +335,16 @@ private data class BoardPresentationState(
     val isRecycleBinOperationRunning: Boolean = false,
     val datePickerTarget: DatePickerTarget? = null,
     val transientCompletedTasks: Map<String, Task> = emptyMap(),
+    val isRefreshing: Boolean = false,
 )
 
 private enum class DatePickerTarget { START, DUE }
 
-private fun List<Task>.toBoardUiState(deletedTasks: List<Task>, notice: ServerDeletionNotice?, ui: BoardPresentationState): BoardUiState {
+private fun List<Task>.toBoardUiState(
+    deletedTasks: List<Task>,
+    notices: List<ServerDeletionNotice>,
+    ui: BoardPresentationState,
+): BoardUiState {
     val todo = tasksFor(TaskStatus.TODO).withTransientCompleted(ui.transientCompletedTasks, TaskStatus.TODO)
     val doing = tasksFor(TaskStatus.DOING).withTransientCompleted(ui.transientCompletedTasks, TaskStatus.DOING)
     val done = tasksFor(TaskStatus.DONE)
@@ -289,7 +355,7 @@ private fun List<Task>.toBoardUiState(deletedTasks: List<Task>, notice: ServerDe
         doing = doing,
         done = done,
         deletedTasks = deletedTasks,
-        serverDeletionNotice = notice,
+        serverDeletionNotices = notices,
         selectedStatus = ui.selectedStatus,
         isSearching = ui.isSearching,
         searchQuery = ui.searchQuery,
@@ -315,9 +381,10 @@ private fun List<Task>.toBoardUiState(deletedTasks: List<Task>, notice: ServerDe
         transientCompletedTaskIds = ui.transientCompletedTasks.keys,
         showStartDatePicker = ui.datePickerTarget == DatePickerTarget.START,
         showDueDatePicker = ui.datePickerTarget == DatePickerTarget.DUE,
+        isRefreshing = ui.isRefreshing,
     )
 }
-private fun List<Task>.tasksFor(status: TaskStatus) = filter { it.status == status }.sortedByDescending(Task::isPinned)
+private fun List<Task>.tasksFor(status: TaskStatus) = filter { it.status == status }
 private fun List<Task>.withTransientCompleted(snapshots: Map<String, Task>, status: TaskStatus): List<Task> {
     val completedSnapshots = snapshots.values.filter { it.status == status }
     val completedIds = completedSnapshots.mapTo(mutableSetOf(), Task::id)
@@ -343,7 +410,4 @@ private fun Task.toEditorState(zone: ZoneId): TaskEditorState {
         initialDueDateMillis = dueDateMillis,
     )
 }
-private fun TaskEditorState.isDirty() = content != initialContent || reminderHour != initialReminderHour ||
-    reminderMinute != initialReminderMinute || reminderRepeat != initialReminderRepeat ||
-    startDateMillis != initialStartDateMillis || dueDateMillis != initialDueDateMillis
 private fun Set<String>.toggle(value: String) = if (value in this) this - value else this + value

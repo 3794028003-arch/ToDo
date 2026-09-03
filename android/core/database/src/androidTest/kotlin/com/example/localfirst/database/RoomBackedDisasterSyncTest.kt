@@ -162,7 +162,7 @@ class RoomBackedDisasterSyncTest {
         assertEquals("task-x", notice.taskId)
         assertEquals("Task task-x", notice.title)
 
-        repository.dismissServerDeletionNotice(notice.taskId)
+        repository.dismissServerDeletionNotices(setOf(notice.taskId))
         assertTrue(repository.serverDeletionNotices.first().isEmpty())
         database.close()
     }
@@ -205,7 +205,7 @@ class RoomBackedDisasterSyncTest {
             repository.serverDeletionNotices.first().map { notice -> notice.taskId },
         )
 
-        repository.dismissServerDeletionNotice("task-c")
+        repository.dismissServerDeletionNotices(setOf("task-c"))
         assertEquals(
             listOf("task-a", "task-b"),
             repository.serverDeletionNotices.first().map { notice -> notice.taskId },

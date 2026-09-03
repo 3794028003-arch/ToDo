@@ -29,4 +29,5 @@ data class TaskEntity(
     @ColumnInfo(defaultValue = "0")
     val createdSequence: Long = 0,
     val lastModifiedSequence: Long? = null,
+    val manualOrder: Long? = null,
 )

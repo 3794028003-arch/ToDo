@@ -76,6 +76,7 @@ class RoomTaskMutationStore(
     ) { current, nextRevision ->
         current.copy(
             status = status,
+            manualOrder = null,
             reminderAtMillis = if (status == TaskStatus.DONE) null else current.reminderAtMillis,
             reminderRepeat = if (status == TaskStatus.DONE) ReminderRepeat.NONE else current.reminderRepeat,
             localRevision = nextRevision,
@@ -101,6 +102,7 @@ class RoomTaskMutationStore(
         database.taskDao().upsert(
             current.copy(
                 status = TaskStatus.DONE,
+                manualOrder = null,
                 reminderAtMillis = null,
                 reminderRepeat = ReminderRepeat.NONE,
                 localRevision = completionRevision,

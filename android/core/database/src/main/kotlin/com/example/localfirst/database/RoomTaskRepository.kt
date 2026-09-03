@@ -1,9 +1,11 @@
 package com.example.localfirst.database
 
+import androidx.room.withTransaction
 import com.example.localfirst.data.Task
 import com.example.localfirst.data.ReminderRepeat
 import com.example.localfirst.data.TaskRepository
 import com.example.localfirst.data.ServerDeletionNotice
+import com.example.localfirst.data.RemoteTask
 import com.example.localfirst.data.TaskReminderScheduler
 import com.example.localfirst.sync.TaskStatus
 import java.util.UUID
@@ -11,7 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
 class RoomTaskRepository(
-    database: TaskDatabase,
+    private val database: TaskDatabase,
     private val scheduleSync: () -> Unit,
     private val reminderScheduler: TaskReminderScheduler? = null,
     private val taskIdFactory: () -> String = { UUID.randomUUID().toString() },
@@ -37,6 +39,7 @@ class RoomTaskRepository(
                 ServerDeletionNotice(
                     taskId = entity.id,
                     title = entity.title,
+                    deletedAtMillis = checkNotNull(entity.deletedAtMillis),
                 )
             }
         }
@@ -120,6 +123,14 @@ class RoomTaskRepository(
         requestBackgroundSync()
     }
 
+    override suspend fun reorderTasks(taskIdsInDisplayOrder: List<String>) {
+        database.withTransaction {
+            taskIdsInDisplayOrder.forEachIndexed { index, taskId ->
+                taskDao.setManualOrder(taskId, index.toLong())
+            }
+        }
+    }
+
     override suspend fun deleteTask(taskId: String) {
         mutations.deleteTaskAndEnqueue(
             taskId = taskId,
@@ -136,8 +147,50 @@ class RoomTaskRepository(
         requestBackgroundSync()
     }
 
-    override suspend fun dismissServerDeletionNotice(taskId: String) {
-        taskDao.dismissServerDeletionNotice(taskId)
+    override suspend fun dismissServerDeletionNotices(taskIds: Set<String>) {
+        if (taskIds.isNotEmpty()) taskDao.dismissServerDeletionNotices(taskIds)
+    }
+
+    override suspend fun mergeRemoteTasks(tasks: List<RemoteTask>) {
+        tasks.forEach { remote ->
+            val existing = taskDao.findById(remote.id)
+            if (existing == null || (existing.serverVersion != null && remote.version >= existing.serverVersion)) {
+                val newlyDeletedOnAnotherDevice =
+                    existing?.deletedAtMillis == null && existing != null && remote.deletedAtMillis != null
+                taskDao.upsert(
+                    TaskEntity(
+                        id = remote.id,
+                        title = remote.title,
+                        status = remote.status,
+                        reminderAtMillis = remote.reminderAtMillis,
+                        reminderRepeat = remote.reminderRepeat,
+                        isPinned = remote.isPinned,
+                        startDateMillis = remote.startDateMillis,
+                        dueDateMillis = remote.dueDateMillis,
+                        localRevision = existing?.localRevision ?: 1,
+                        serverVersion = remote.version,
+                        deletedAtMillis = remote.deletedAtMillis,
+                        permanentDeletionRequested = existing?.permanentDeletionRequested ?: false,
+                        serverDeletionNoticePending =
+                            existing?.serverDeletionNoticePending == true || newlyDeletedOnAnotherDevice,
+                        serverDeletionNoticeSequence = when {
+                            existing?.serverDeletionNoticePending == true -> existing.serverDeletionNoticeSequence
+                            newlyDeletedOnAnotherDevice -> remote.deletedAtMillis
+                            else -> null
+                        },
+                        createdSequence = existing?.createdSequence ?: nowMillis(),
+                        lastModifiedSequence = existing?.lastModifiedSequence,
+                        manualOrder = existing?.manualOrder,
+                    ),
+                )
+                updateReminder(
+                    remote.id,
+                    remote.title,
+                    remote.reminderAtMillis.takeIf { remote.deletedAtMillis == null },
+                    remote.reminderRepeat,
+                )
+            }
+        }
     }
 
     private fun requestBackgroundSync() {

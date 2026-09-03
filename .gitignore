@@ -6,6 +6,10 @@
 *.iml
 # Machine-specific Android SDK and SYNC_BASE_URL settings.
 local.properties
+# Release signing keys and local credential files must never enter Git.
+*.jks
+*.keystore
+*signing.properties
 /work/
 .env
 *.log

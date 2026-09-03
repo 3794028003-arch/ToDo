@@ -8,9 +8,9 @@ import com.example.localfirst.sync.TaskStatus
 data class BoardUiState(
     val todo: List<Task> = emptyList(), val doing: List<Task> = emptyList(), val done: List<Task> = emptyList(),
     val deletedTasks: List<Task> = emptyList(),
-    val serverDeletionNotice: ServerDeletionNotice? = null, val selectedStatus: TaskStatus = TaskStatus.TODO,
+    val serverDeletionNotices: List<ServerDeletionNotice> = emptyList(), val selectedStatus: TaskStatus = TaskStatus.TODO,
     val isSearching: Boolean = false, val searchQuery: String = "", val searchResults: List<Task> = emptyList(),
-    val isDarkMode: Boolean = false, val isMainMenuOpen: Boolean = false,
+    val isDarkMode: Boolean = true, val isMainMenuOpen: Boolean = false,
     val expandedTaskId: String? = null, val busyTaskIds: Set<String> = emptySet(),
     val editor: TaskEditorState? = null, val showTimePicker: Boolean = false, val showRepeatPicker: Boolean = false,
     val showDiscardConfirmation: Boolean = false, val operationConfirmation: OperationConfirmation? = null,
@@ -24,7 +24,12 @@ data class BoardUiState(
     val transientCompletedTaskIds: Set<String> = emptySet(),
     val showStartDatePicker: Boolean = false,
     val showDueDatePicker: Boolean = false,
+    val isRefreshing: Boolean = false,
 )
+
+fun interface BoardRefresher {
+    suspend fun refresh()
+}
 
 data class TaskEditorState(
     val taskId: String? = null, val content: String = "",
@@ -41,6 +46,13 @@ data class TaskEditorState(
     val hasReminder: Boolean get() = reminderHour != null && reminderMinute != null
 }
 
+internal fun TaskEditorState.isDirty() = content != initialContent || reminderHour != initialReminderHour ||
+    reminderMinute != initialReminderMinute || reminderRepeat != initialReminderRepeat ||
+    startDateMillis != initialStartDateMillis || dueDateMillis != initialDueDateMillis
+
+internal fun shouldDismissEditorDrag(offsetPx: Float, sheetHeightPx: Float, velocityYPxPerSecond: Float): Boolean =
+    offsetPx >= sheetHeightPx * .18f || velocityYPxPerSecond >= 1_200f
+
 data class HighlightRequest(val taskId: String, val status: TaskStatus, val generation: Long)
 
 sealed interface OperationConfirmation {
@@ -51,7 +63,11 @@ sealed interface OperationConfirmation {
     data class BatchDelete(val taskIds: Set<String>) : OperationConfirmation
 }
 
-sealed interface BoardEffect { data object RequestReminderPermissions : BoardEffect }
+sealed interface BoardEffect {
+    data object RequestReminderPermissions : BoardEffect
+    data class ShowStatusMessage(val message: String) : BoardEffect
+    data class ShowRefreshMessage(val message: String) : BoardEffect
+}
 
 sealed interface BoardAction {
     data class SelectStatus(val status: TaskStatus) : BoardAction
@@ -69,13 +85,13 @@ sealed interface BoardAction {
     data class ToggleDeletedTaskSelection(val taskId: String) : BoardAction
     data object ToggleSelectAllDeletedTasks : BoardAction
     data object RequestPermanentDeleteSelected : BoardAction
-    data object StartBatchEdit : BoardAction
+    data class StartBatchEdit(val taskId: String) : BoardAction
     data object CancelBatchEdit : BoardAction
     data class ToggleBatchSelection(val taskId: String) : BoardAction
     data object ToggleSelectAll : BoardAction
     data object RequestBatchDelete : BoardAction
     data class BatchMove(val status: TaskStatus) : BoardAction
-    data class ToggleTaskActions(val taskId: String) : BoardAction
+    data class ReorderTasks(val orderedTaskIds: List<String>) : BoardAction
     data object CloseTaskActions : BoardAction
     data class SetPinned(val task: Task, val isPinned: Boolean) : BoardAction
     data object OpenCreate : BoardAction
@@ -100,6 +116,7 @@ sealed interface BoardAction {
     data object ConfirmDiscardEditor : BoardAction
     data class RequestMove(val task: Task, val status: TaskStatus) : BoardAction
     data class MoveImmediately(val task: Task, val status: TaskStatus) : BoardAction
+    data class QuickAdvance(val task: Task) : BoardAction
     data class QuickComplete(val task: Task) : BoardAction
     data object RefreshBoard : BoardAction
     data class RequestDelete(val task: Task) : BoardAction
@@ -107,5 +124,8 @@ sealed interface BoardAction {
     data object ConfirmOperation : BoardAction
     data object CancelOperation : BoardAction
     data object HighlightConsumed : BoardAction
-    data class DismissServerDeletionNotice(val taskId: String) : BoardAction
+    data class AcknowledgeServerDeletionNotices(
+        val taskIds: Set<String>,
+        val openRecycleBin: Boolean = false,
+    ) : BoardAction
 }

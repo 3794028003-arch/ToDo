@@ -1,0 +1,31 @@
+<svg viewBox="0 0 1024 1024" width="512" height="512" xmlns="http://www.w3.org/2000/svg">
+  <!-- 背景 -->
+  <rect width="1024" height="1024" rx="225" fill="#1C1C1E"/>
+
+  <!-- 渐变定义 -->
+  <defs>
+    <linearGradient id="flow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8E8E93"/> <!-- 灰: TODO -->
+      <stop offset="50%" stop-color="#0A84FF"/> <!-- 蓝: DOING -->
+      <stop offset="100%" stop-color="#30D158"/> <!-- 绿: DONE -->
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="30" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+
+  <!-- 发光渐变对勾 -->
+  <path d="M 220 520 L 420 720 L 800 300"
+        stroke="url(#flow)"
+        stroke-width="100"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        fill="none"
+        filter="url(#glow)"/>
+
+  <!-- 状态点缀 -->
+  <circle cx="220" cy="520" r="20" fill="#FFFFFF"/>
+  <circle cx="420" cy="720" r="20" fill="#FFFFFF"/>
+  <circle cx="800" cy="300" r="20" fill="#FFFFFF"/>
+</svg>

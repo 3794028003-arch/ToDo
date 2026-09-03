@@ -6,7 +6,7 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [TaskEntity::class, SyncOperationEntity::class],
-    version = 9,
+    version = 10,
     exportSchema = false,
 )
 @TypeConverters(RoomConverters::class)

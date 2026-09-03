@@ -13,6 +13,36 @@ val localProperties = Properties().apply {
     }
 }
 
+val releaseSigningPropertiesFile = providers.gradleProperty("DOTI_SIGNING_PROPERTIES").orNull
+    ?.trim()
+    ?.takeIf(String::isNotEmpty)
+    ?.let(rootProject::file)
+    ?: localProperties.getProperty("DOTI_SIGNING_PROPERTIES")
+        ?.trim()
+        ?.takeIf(String::isNotEmpty)
+        ?.let(rootProject::file)
+
+val releaseSigningProperties = Properties().apply {
+    if (releaseSigningPropertiesFile?.isFile == true) {
+        releaseSigningPropertiesFile.inputStream().use(::load)
+    }
+}
+
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("release", ignoreCase = true)
+}
+
+if (isReleaseBuildRequested && releaseSigningPropertiesFile?.isFile != true) {
+    error(
+        "DoTi release signing is not configured. Set DOTI_SIGNING_PROPERTIES " +
+            "in android/local.properties or as a Gradle property.",
+    )
+}
+
+fun Properties.requiredSigningValue(name: String): String =
+    getProperty(name)?.trim()?.takeIf(String::isNotEmpty)
+        ?: error("Missing '$name' in ${releaseSigningPropertiesFile?.absolutePath}")
+
 val debugSyncBaseUrl = providers.gradleProperty("SYNC_BASE_URL").orNull
     ?.trim()
     ?.takeIf(String::isNotEmpty)
@@ -47,6 +77,17 @@ android {
         compose = true
     }
 
+    signingConfigs {
+        if (releaseSigningPropertiesFile?.isFile == true) {
+            create("release") {
+                storeFile = rootProject.file(releaseSigningProperties.requiredSigningValue("storeFile"))
+                storePassword = releaseSigningProperties.requiredSigningValue("storePassword")
+                keyAlias = releaseSigningProperties.requiredSigningValue("keyAlias")
+                keyPassword = releaseSigningProperties.requiredSigningValue("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             buildConfigField("String", "SYNC_BASE_URL", debugSyncBaseUrl.asBuildConfigString())
@@ -54,8 +95,9 @@ android {
         }
         release {
             isMinifyEnabled = false
-            buildConfigField("String", "SYNC_BASE_URL", "\"https://example.invalid/\"")
-            manifestPlaceholders["usesCleartextTraffic"] = "false"
+            signingConfig = signingConfigs.findByName("release")
+            buildConfigField("String", "SYNC_BASE_URL", debugSyncBaseUrl.asBuildConfigString())
+            manifestPlaceholders["usesCleartextTraffic"] = debugSyncBaseUrl.startsWith("http://").toString()
         }
     }
 }
@@ -79,8 +121,11 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.10.0")
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.work:work-runtime:2.11.2")
+    implementation("com.squareup.retrofit2:retrofit:2.11.0")
+    implementation("com.squareup.retrofit2:converter-gson:2.11.0")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
 
     androidTestImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test:core:1.7.0")

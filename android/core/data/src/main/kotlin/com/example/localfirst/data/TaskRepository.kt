@@ -25,6 +25,20 @@ enum class ReminderRepeat {
 data class ServerDeletionNotice(
     val taskId: String,
     val title: String,
+    val deletedAtMillis: Long,
+)
+
+data class RemoteTask(
+    val id: String,
+    val title: String,
+    val status: TaskStatus,
+    val version: Long,
+    val reminderAtMillis: Long? = null,
+    val reminderRepeat: ReminderRepeat = ReminderRepeat.NONE,
+    val isPinned: Boolean = false,
+    val startDateMillis: Long? = null,
+    val dueDateMillis: Long? = null,
+    val deletedAtMillis: Long? = null,
 )
 
 interface TaskRepository {
@@ -53,11 +67,15 @@ interface TaskRepository {
 
     suspend fun setPinned(taskId: String, isPinned: Boolean)
 
+    suspend fun reorderTasks(taskIdsInDisplayOrder: List<String>) = Unit
+
     suspend fun deleteTask(taskId: String)
 
     suspend fun permanentlyDeleteTask(taskId: String)
 
-    suspend fun dismissServerDeletionNotice(taskId: String)
+    suspend fun dismissServerDeletionNotices(taskIds: Set<String>)
+
+    suspend fun mergeRemoteTasks(tasks: List<RemoteTask>) = Unit
 }
 
 interface TaskReminderScheduler {

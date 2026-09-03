@@ -325,4 +325,32 @@ class TaskDatabaseMigrationTest {
         }
         helper.close()
     }
+
+    @Test
+    fun migrationNineToTenAddsNullableManualOrderWithoutChangingExistingTasks() {
+        val configuration = SupportSQLiteOpenHelper.Configuration.builder(context)
+            .name(databaseName)
+            .callback(
+                object : SupportSQLiteOpenHelper.Callback(9) {
+                    override fun onCreate(db: SupportSQLiteDatabase) {
+                        db.execSQL("CREATE TABLE tasks (id TEXT NOT NULL PRIMARY KEY, title TEXT NOT NULL)")
+                        db.execSQL("INSERT INTO tasks (id, title) VALUES ('task-1', 'Existing')")
+                    }
+
+                    override fun onUpgrade(db: SupportSQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+                },
+            )
+            .build()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(configuration)
+        val database = helper.writableDatabase
+
+        MIGRATION_9_10.migrate(database)
+
+        database.query("SELECT title, manualOrder FROM tasks WHERE id = 'task-1'").use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("Existing", cursor.getString(0))
+            assertEquals(true, cursor.isNull(1))
+        }
+        helper.close()
+    }
 }

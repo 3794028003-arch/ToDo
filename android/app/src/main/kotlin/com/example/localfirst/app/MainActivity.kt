@@ -19,16 +19,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.example.localfirst.board.BoardRoute
+import com.example.localfirst.board.BoardRefresher
 import com.example.localfirst.board.BoardViewModel
 import com.example.localfirst.data.TaskRepository
 import com.example.localfirst.sync.TaskStatus
@@ -36,7 +45,10 @@ import com.example.localfirst.sync.TaskStatus
 class MainActivity : ComponentActivity() {
     private val graph: AppGraph get() = (application as LocalFirstApplication).graph
     private val boardViewModel: BoardViewModel by viewModels {
-        BoardViewModelFactory(repository = graph.repository)
+        BoardViewModelFactory(
+            repository = graph.repository,
+            refresher = BoardRefresher(graph::synchronizeAccount),
+        )
     }
     private val reminderViewModel: ReminderViewModel by viewModels {
         ReminderViewModelFactory(
@@ -44,12 +56,20 @@ class MainActivity : ComponentActivity() {
             onMove = graph::handleReminderAction,
         )
     }
+    private val accountViewModel: AccountViewModel by viewModels {
+        AccountViewModelFactory(graph.accountRepository, graph::synchronizeAccount, graph::mergeDownloadedTasks)
+    }
+    private val settingsViewModel: SettingsViewModel by viewModels {
+        SettingsViewModelFactory(graph.appearancePreferences, graph.accountRepository)
+    }
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            val boardState by boardViewModel.state.collectAsState()
             val reminderState by reminderViewModel.state.collectAsState()
+            val accountState by accountViewModel.state.collectAsState()
+            val settingsState by settingsViewModel.state.collectAsState()
+            val settingsEvent by settingsViewModel.events.collectAsState()
             val reminderAlert = reminderState.current
             var showNotificationSettings by remember { mutableStateOf(false) }
             val exactAlarmLauncher = rememberLauncherForActivityResult(
@@ -76,10 +96,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
-            MaterialTheme(
-                colorScheme = if (boardState.isDarkMode) DARK_COLORS else LIGHT_COLORS,
-            ) {
-                BoardRoute(
+            val useDarkMode = when (settingsState.appearance.theme) {
+                AppThemeMode.LIGHT -> false
+                AppThemeMode.SYSTEM -> isSystemInDarkTheme()
+                AppThemeMode.DARK -> true
+            }
+            val systemDensity = LocalDensity.current
+            val scaledDensity = Density(
+                density = systemDensity.density,
+                fontScale = systemDensity.fontScale * settingsState.appearance.fontSize.scale,
+            )
+            LaunchedEffect(settingsEvent) {
+                if (settingsEvent == SettingsEvent.OPEN_LOGIN) {
+                    accountViewModel.openLogin()
+                    settingsViewModel.consumeEvent()
+                }
+            }
+
+            CompositionLocalProvider(LocalDensity provides scaledDensity) {
+                MaterialTheme(colorScheme = if (useDarkMode) DARK_COLORS else LIGHT_COLORS) {
+                    Box(Modifier.fillMaxSize()) {
+                    BoardRoute(
                     viewModel = boardViewModel,
                     reminderTitle = reminderAlert?.title,
                     reminderCount = reminderState.pendingCount,
@@ -89,7 +126,7 @@ class MainActivity : ComponentActivity() {
                     onReminderPermissionsRequired = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                             ContextCompat.checkSelfPermission(
-                                this,
+                                this@MainActivity,
                                 Manifest.permission.POST_NOTIFICATIONS,
                             ) != PackageManager.PERMISSION_GRANTED
                         ) {
@@ -102,7 +139,18 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     },
+                    accountContact = accountState.session?.contact,
+                    accountSyncState = accountState.syncState.name,
+                    appVersion = BuildConfig.VERSION_NAME,
+                    onAccountClick = accountViewModel::openAccount,
+                    onUpload = accountViewModel::openUpload,
+                    onDownload = accountViewModel::openDownload,
+                    onSettings = settingsViewModel::openSettings,
+                    darkModeOverride = useDarkMode,
                 )
+                SettingsNavigationHost(settingsState, settingsViewModel)
+                ShareDialogs(accountState, accountViewModel)
+                AccountScreen(accountState, accountViewModel)
                 if (showNotificationSettings) {
                     AlertDialog(
                         onDismissRequest = { showNotificationSettings = false },
@@ -125,6 +173,8 @@ class MainActivity : ComponentActivity() {
                         },
                     )
                 }
+                    }
+                }
             }
         }
     }
@@ -132,6 +182,7 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         graph.setForeground(true)
+        graph.scheduleSync()
     }
 
     override fun onStop() {
@@ -183,36 +234,37 @@ private val LIGHT_COLORS = lightColorScheme(
 )
 
 private val DARK_COLORS = darkColorScheme(
-    primary = Color(0xFF9CBBFF),
-    onPrimary = Color(0xFF082E73),
-    primaryContainer = Color(0xFF1F4FAD),
-    onPrimaryContainer = Color(0xFFDCE7FF),
-    secondary = Color(0xFFC5CAC7),
-    onSecondary = Color(0xFF2C312F),
-    background = Color(0xFF0F0F10),
-    onBackground = Color(0xFFE6E1E5),
-    surface = Color(0xFF0F0F10),
-    onSurface = Color(0xFFE6E1E5),
-    surfaceDim = Color(0xFF0F0F10),
-    surfaceBright = Color(0xFF343437),
-    surfaceContainerLowest = Color(0xFF0A0A0B),
-    surfaceContainerLow = Color(0xFF171719),
-    surfaceContainer = Color(0xFF1C1C1F),
-    surfaceContainerHigh = Color(0xFF242427),
-    surfaceContainerHighest = Color(0xFF2D2D30),
+    primary = Color(0xFF0A84FF),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFF123A63),
+    onPrimaryContainer = Color(0xFFDCEEFF),
+    secondary = Color(0xFF8E8E93),
+    onSecondary = Color.White,
+    background = Color.Black,
+    onBackground = Color.White,
+    surface = Color(0xFF151517),
+    onSurface = Color.White,
+    surfaceDim = Color.Black,
+    surfaceBright = Color(0xFF2C2C2E),
+    surfaceContainerLowest = Color.Black,
+    surfaceContainerLow = Color(0xFF101012),
+    surfaceContainer = Color(0xFF1C1C1E),
+    surfaceContainerHigh = Color(0xFF242426),
+    surfaceContainerHighest = Color(0xFF2C2C2E),
     surfaceVariant = Color(0xFF242426),
-    onSurfaceVariant = Color(0xFFC9C5C8),
-    outline = Color(0xFF777276),
-    outlineVariant = Color(0xFF454246),
+    onSurfaceVariant = Color(0xFF8E8E93),
+    outline = Color(0xFF636366),
+    outlineVariant = Color(0xFF2C2C2E),
 )
 
 private class BoardViewModelFactory(
     private val repository: TaskRepository,
+    private val refresher: BoardRefresher,
 ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(BoardViewModel::class.java))
-        return BoardViewModel(repository) as T
+        return BoardViewModel(repository, refresher) as T
     }
 }
 
@@ -224,5 +276,28 @@ private class ReminderViewModelFactory(
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         require(modelClass.isAssignableFrom(ReminderViewModel::class.java))
         return ReminderViewModel(store, onMove) as T
+    }
+}
+
+private class AccountViewModelFactory(
+    private val repository: AccountRepository,
+    private val onAuthenticated: suspend () -> Unit,
+    private val onDownloaded: suspend (AccountSession, List<com.example.localfirst.data.RemoteTask>) -> Unit,
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        require(modelClass.isAssignableFrom(AccountViewModel::class.java))
+        return AccountViewModel(repository, onAuthenticated, onDownloaded) as T
+    }
+}
+
+private class SettingsViewModelFactory(
+    private val preferences: AppearancePreferences,
+    private val repository: AccountRepository,
+) : ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        require(modelClass.isAssignableFrom(SettingsViewModel::class.java))
+        return SettingsViewModel(preferences, repository) as T
     }
 }
